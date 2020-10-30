@@ -11,12 +11,7 @@
     (fn [{:keys [uri title content-dom date enclosure author description image]}]
       (let [site-url (if (.endsWith site-url "/") (apply str (butlast site-url)) site-url)
             link (str site-url uri)]
-        (cond-> {:guid        link
-                 :link        link
-                 :title       title
-                 :description description
-                 :author      author
-                 :pubDate     date}
+        (cond-> {}
                 image
                 (assoc :thumbnail (str site-url image))
                 enclosure
