@@ -156,6 +156,7 @@
              :parsed-archive-group    (.parse archive-fmt formatted-group)
              :uri                     (page-uri file-name :post-root-uri config)
              :tags                    (set (:tags page-meta))
+             :image                   (:image page-meta)
              :klipse/global           (:klipse config)
              :klipse/local            (:klipse page-meta)})
           (add-toc config)))))
