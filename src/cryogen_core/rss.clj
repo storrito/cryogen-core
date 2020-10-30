@@ -8,15 +8,19 @@
 
 (defn posts-to-items [^String site-url posts]
   (map
-    (fn [{:keys [uri title content-dom date enclosure author description]}]
-      (let [link (str (if (.endsWith site-url "/") (apply str (butlast site-url)) site-url) uri)]
-        (merge {:guid        link
-                :link        link
-                :title       title
-                :description description
-                :author      author
-                :pubDate     date}
-               (if enclosure {:enclosure   enclosure}))))
+    (fn [{:keys [uri title content-dom date enclosure author description image]}]
+      (let [site-url (if (.endsWith site-url "/") (apply str (butlast site-url)) site-url)
+            link (str site-url uri)]
+        (cond-> {:guid        link
+                 :link        link
+                 :title       title
+                 :description description
+                 :author      author
+                 :pubDate     date}
+                image
+                (assoc :thumbnail (str site-url image))
+                enclosure
+                (assoc :enclosure enclosure))))
     posts))
 
 (defn make-channel [config posts]
