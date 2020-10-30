@@ -511,7 +511,7 @@
             {:resources     folders
              :ignored-files (map #(re-pattern-from-exts (m/exts %)) (m/markups))}))))
 
-(defn compile-assets
+#_(defn compile-assets
   "Generates all the html and copies over resources specified in the config.
 
   Params:
