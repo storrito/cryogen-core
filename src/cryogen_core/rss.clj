@@ -6,7 +6,7 @@
   (:import java.util.Date))
 
 
-(defn posts-to-items [^String site-url posts]
+(defn posts-to-items [{:keys [site-url blog-prefix]} posts]
   (map
     (fn [{:keys [uri title content-dom date enclosure author description image]}]
       (let [site-url (if (.endsWith site-url "/") (apply str (butlast site-url)) site-url)
@@ -18,7 +18,7 @@
                  :author      author
                  :pubDate     date}
                 image
-                (assoc :thumbnail (str site-url image))
+                (assoc :thumbnail (str site-url blog-prefix image))
                 enclosure
                 (assoc :enclosure enclosure))))
     posts))
@@ -31,7 +31,7 @@
               :link          (:site-url config)
               :description   (:description config)
               :lastBuildDate (Date.)})
-    (posts-to-items (:site-url config) posts)))
+    (posts-to-items config posts)))
 
 (defn make-filtered-channels [{:keys [rss-filters blog-prefix] :as config} posts-by-tag]
   (doseq [filter rss-filters]
