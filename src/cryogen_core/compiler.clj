@@ -18,7 +18,10 @@
             [cryogen-core.sitemap :as sitemap]
             [cryogen-core.util :as util]
             [cryogen-core.zip-util :as zip-util]
-            [cryogen-core.toc :as toc])
+            [cryogen-core.toc :as toc]
+            [clj-yaml.core :as yaml]
+            [clojure.string :as str]
+            )
   (:import java.util.Locale
            (java.io StringReader)
            (java.util Date)))
@@ -80,32 +83,49 @@
                     :dirty file-name)]
      (cryogen-io/path "/" blog-prefix page-uri uri-end))))
 
+(defn map-over-values
+  [f m]
+  (into {} (for [[k v] m] [k (f v)])))
+
 (defn read-page-meta
   "Returns the clojure map from the top of a markdown page/post"
-  [page rdr]
+  [page meta-str]
   (try
-    (let [metadata (read rdr)]
-      (s/validate schemas/MetaData metadata)
-      metadata)
+    (let [metadata (->> (into {} (yaml/parse-string
+                                   meta-str))
+                        (map-over-values
+                          (fn [v]
+                            (if (= (type v)
+                                   java.util.Date)
+                              (.format (java.text.SimpleDateFormat. "yyyy-MM-dd") v)
+                              v))))]
+      (println metadata)
+      (s/validate schemas/MetaData metadata))
     (catch Exception e
       (throw (ex-info (ex-message e)
                       (assoc (ex-data e) :page page))))))
+
+(defn parse-page-str
+  [s]
+  (remove str/blank?
+          (str/split s #"---\n")))
 
 (defn page-content
   "Returns a map with the given page's file-name, metadata and content parsed from
   the file with the given markup."
   [^java.io.File page config markup]
-  (with-open [rdr (java.io.PushbackReader. (io/reader page))]
-    (let [re-root     (re-pattern (str "^.*?(" (:page-root config) "|" (:post-root config) ")/"))
-          page-fwd    (string/replace (str page) "\\" "/")  ;; make it work on Windows
-          page-name   (if (:collapse-subdirs? config) (.getName page) (string/replace page-fwd re-root ""))
-          file-name   (string/replace page-name (re-pattern-from-exts (m/exts markup)) ".html")
-          page-meta   (read-page-meta page-name rdr)
-          content     ((m/render-fn markup) rdr (assoc config :page-meta page-meta))
-          content-dom (util/trimmed-html-snippet content)]
-      {:file-name   file-name
-       :page-meta   page-meta
-       :content-dom content-dom})))
+  (let [[meta-str content-str] (parse-page-str (slurp page))
+        re-root (re-pattern (str "^.*?(" (:page-root config) "|" (:post-root config) ")/"))
+        page-fwd (string/replace (str page) "\\" "/")       ;; make it work on Windows
+        page-name (if (:collapse-subdirs? config) (.getName page) (string/replace page-fwd re-root ""))
+        file-name (string/replace page-name (re-pattern-from-exts (m/exts markup)) ".html")
+        page-meta (read-page-meta page-name meta-str)
+        content-rdr (java.io.StringReader. content-str)
+        content ((m/render-fn markup) content-rdr (assoc config :page-meta page-meta))
+        content-dom (util/trimmed-html-snippet content)]
+    {:file-name file-name
+     :page-meta page-meta
+     :content-dom content-dom}))
 
 (defn add-toc
   "Adds :toc to article, if necessary"

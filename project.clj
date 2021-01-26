@@ -15,6 +15,7 @@
                            [me.raynes/fs "1.4.6"]
                            [pandect "0.6.1"]
                            [prismatic/schema "1.1.12"]
-                           [selmer "1.12.27"]]
+                           [selmer "1.12.27"]
+                           [clj-commons/clj-yaml "0.7.2"]]
             :deploy-repositories [["snapshots" :clojars]
                                   ["releases" :clojars]])
