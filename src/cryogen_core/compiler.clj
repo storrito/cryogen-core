@@ -106,9 +106,11 @@
                       (assoc (ex-data e) :page page))))))
 
 (defn parse-page-str
+  "Separates the yaml block marked by `---` from the body of the markdown document"
   [s]
-  (remove str/blank?
-          (str/split s #"---\n")))
+  (let [matcher (re-matcher #"(?si)---\n(.*?)\n---(.*)"
+                            s)]
+    (rest (re-find matcher))))
 
 (defn page-content
   "Returns a map with the given page's file-name, metadata and content parsed from
