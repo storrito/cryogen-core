@@ -398,13 +398,31 @@
   (update post :content-dom
           #(preview-dom blocks-per-preview %)))
 
+(defn fill-up
+  [seq n]
+  (take n
+        (concat seq (repeat nil))))
+
 (defn create-previews
   "Returns a sequence of vectors, each containing a set of post previews"
   [posts posts-per-page blocks-per-preview]
-  (->> posts
-       (map #(create-preview blocks-per-preview %))
-       (partition-all posts-per-page)
-       (map-indexed (fn [i v] {:index (inc i) :posts v}))))
+  (let [posts-by-category (group-by :category posts)
+        posts (->> (concat (get posts-by-category "post")
+                           (get posts-by-category nil))
+                   (map #(create-preview blocks-per-preview %))
+                   (partition-all posts-per-page))
+        leans (->> (get posts-by-category "lean")
+                   (map #(create-preview blocks-per-preview %))
+                   (partition-all posts-per-page))
+        max-entries (max (count posts)
+                         (count leans))]
+    (map (fn [i posts leans]
+           {:index (inc i)
+            :posts posts
+            :leans leans})
+         (range max-entries)
+         (fill-up posts max-entries)
+         (fill-up leans max-entries))))
 
 (defn create-preview-links
   "Turn each vector of previews into a map with :prev and :next keys that contain the uri of the
@@ -427,7 +445,7 @@
                      (assoc-in previews [1 :prev] (page-uri "index.html" params))
                      previews)]
       (cryogen-io/create-folder (cryogen-io/path "/" blog-prefix "p"))
-      (doseq [{:keys [index posts prev next]} previews
+      (doseq [{:keys [index posts leans prev next]} previews
               :let [index-page? (= 1 index)]]
         (write-html
           (if index-page? (page-uri "index.html" params)
@@ -439,6 +457,7 @@
                                :home            (when index-page? true)
                                :selmer/context  (cryogen-io/path "/" blog-prefix "/")
                                :posts           posts
+                               :leans           leans
                                :prev-uri        prev
                                :next-uri        next})))))))
 
