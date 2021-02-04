@@ -99,7 +99,6 @@
                                    java.util.Date)
                               (.format (java.text.SimpleDateFormat. "yyyy-MM-dd") v)
                               v))))]
-      (println metadata)
       (s/validate schemas/MetaData metadata))
     (catch Exception e
       (throw (ex-info (ex-message e)
