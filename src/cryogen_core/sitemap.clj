@@ -13,16 +13,26 @@
 (defn loc [^java.io.File f]
   (-> f (.getAbsolutePath) (.split (cryogen-io/path cryogen-io/public "/")) second))
 
-(defn generate [site-url ignored-files]
+(defn ignore
+  [ignored-files]
+  (fn [^java.io.File file]
+    (let [location (loc file)
+          matches (map #(re-find % location)
+                       ignored-files)]
+      (not (some seq matches)))))
+
+(defn generate [site-url ignored-files ignored-files-sitemap]
   (with-out-str
     (emit
       {:tag :urlset
        :attrs {:xmlns "http://www.sitemaps.org/schemas/sitemap/0.9"}
        :content
-       (for [^java.io.File f (cryogen-io/find-assets cryogen-io/public #{".html"} ignored-files)]
-         {:tag :url
-          :content
-          [{:tag :loc
-            :content [(str site-url (loc f))]}
-           {:tag :lastmod
-            :content [(-> f (.lastModified) (Date.) format-date)]}]})})))
+       (let [files (->> (cryogen-io/find-assets cryogen-io/public #{".html"} ignored-files)
+                        (filter (ignore ignored-files-sitemap)))]
+         (for [^java.io.File f files]
+           {:tag :url
+            :content
+            [{:tag :loc
+              :content [(str site-url (loc f))]}
+             {:tag :lastmod
+              :content [(-> f (.lastModified) (Date.) format-date)]}]}))})))

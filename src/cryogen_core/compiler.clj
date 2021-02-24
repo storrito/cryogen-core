@@ -19,7 +19,10 @@
             [cryogen-core.util :as util]
             [cryogen-core.zip-util :as zip-util]
             [cryogen-core.toc :as toc]
-            [camel-snake-kebab.core :as camel-snake-kebab])
+            [camel-snake-kebab.core :as camel-snake-kebab]
+            [cryogen-core.toc :as toc]
+            [clj-yaml.core :as yaml]
+            [clojure.string :as str])
   (:import java.util.Locale
            (java.io StringReader)
            (java.util Date)))
@@ -81,32 +84,50 @@
                     :dirty path)]
      (cryogen-io/path "/" blog-prefix page-uri uri-end))))
 
+(defn map-over-values
+  [f m]
+  (into {} (for [[k v] m] [k (f v)])))
+
 (defn read-page-meta
   "Returns the clojure map from the top of a markdown page/post"
-  [page rdr]
+  [page meta-str]
   (try
-    (let [metadata (read rdr)]
-      (s/validate schemas/MetaData metadata)
-      metadata)
+    (let [metadata (->> (into {} (yaml/parse-string
+                                   meta-str))
+                        (map-over-values
+                          (fn [v]
+                            (if (= (type v)
+                                   java.util.Date)
+                              (.format (java.text.SimpleDateFormat. "yyyy-MM-dd") v)
+                              v))))]
+      (s/validate schemas/MetaData metadata))
     (catch Exception e
       (throw (ex-info (ex-message e)
                       (assoc (ex-data e) :page page))))))
+
+(defn parse-page-str
+  "Separates the yaml block marked by `---` from the body of the markdown document"
+  [s]
+  (let [matcher (re-matcher #"(?si)---\n(.*?)\n---(.*)"
+                            s)]
+    (rest (re-find matcher))))
 
 (defn page-content
   "Returns a map with the given page's file-name, metadata and content parsed from
   the file with the given markup."
   [^java.io.File page config markup]
-  (with-open [rdr (java.io.PushbackReader. (io/reader page))]
-    (let [re-root     (re-pattern (str "^.*?(" (:page-root config) "|" (:post-root config) ")/"))
-          page-fwd    (string/replace (str page) "\\" "/")  ;; make it work on Windows
-          page-name   (if (:collapse-subdirs? config) (.getName page) (string/replace page-fwd re-root ""))
-          file-name   (string/replace page-name (re-pattern-from-exts (m/exts markup)) ".html")
-          page-meta   (read-page-meta page-name rdr)
-          content     ((m/render-fn markup) rdr (assoc config :page-meta page-meta))
-          content-dom (util/trimmed-html-snippet content)]
-      {:file-name   file-name
-       :page-meta   page-meta
-       :content-dom content-dom})))
+  (let [[meta-str content-str] (parse-page-str (slurp page))
+        re-root (re-pattern (str "^.*?(" (:page-root config) "|" (:post-root config) ")/"))
+        page-fwd (string/replace (str page) "\\" "/")       ;; make it work on Windows
+        page-name (if (:collapse-subdirs? config) (.getName page) (string/replace page-fwd re-root ""))
+        file-name (string/replace page-name (re-pattern-from-exts (m/exts markup)) ".html")
+        page-meta (read-page-meta page-name meta-str)
+        content-rdr (java.io.StringReader. content-str)
+        content ((m/render-fn markup) content-rdr (assoc config :page-meta page-meta))
+        content-dom (util/trimmed-html-snippet content)]
+    {:file-name file-name
+     :page-meta page-meta
+     :content-dom content-dom}))
 
 (defn add-toc
   "Adds :toc to article, if necessary"
@@ -195,7 +216,7 @@
   "Adds the uri and title of a post to the list of posts under each of its tags"
   [tags post]
   (reduce (fn [tags tag]
-            (update-in tags [tag] (fnil conj []) (select-keys post [:uri :title :content-dom :date :enclosure :description])))
+            (update-in tags [tag] (fnil conj []) (select-keys post [:uri :title :content-dom :date :enclosure :description :image])))
           tags
           (:tags post)))
 
@@ -380,13 +401,31 @@
   (update post :content-dom
           #(preview-dom blocks-per-preview %)))
 
+(defn fill-up
+  [seq n]
+  (take n
+        (concat seq (repeat nil))))
+
 (defn create-previews
   "Returns a sequence of vectors, each containing a set of post previews"
   [posts posts-per-page blocks-per-preview]
-  (->> posts
-       (map #(create-preview blocks-per-preview %))
-       (partition-all posts-per-page)
-       (map-indexed (fn [i v] {:index (inc i) :posts v}))))
+  (let [posts-by-category (group-by :category posts)
+        posts (->> (concat (get posts-by-category "post")
+                           (get posts-by-category nil))
+                   (map #(create-preview blocks-per-preview %))
+                   (partition-all posts-per-page))
+        leans (->> (get posts-by-category "lean")
+                   (map #(create-preview blocks-per-preview %))
+                   (partition-all posts-per-page))
+        max-entries (max (count posts)
+                         (count leans))]
+    (map (fn [i posts leans]
+           {:index (inc i)
+            :posts posts
+            :leans leans})
+         (range max-entries)
+         (fill-up posts max-entries)
+         (fill-up leans max-entries))))
 
 (defn create-preview-links
   "Turn each vector of previews into a map with :prev and :next keys that contain the uri of the
@@ -409,7 +448,7 @@
                      (assoc-in previews [1 :prev] (page-uri "index.html" params))
                      previews)]
       (cryogen-io/create-folder (cryogen-io/path "/" blog-prefix "p"))
-      (doseq [{:keys [index posts prev next]} previews
+      (doseq [{:keys [index posts leans prev next]} previews
               :let [index-page? (= 1 index)]]
         (write-html
           (if index-page? (page-uri "index.html" params)
@@ -421,6 +460,7 @@
                                :home            (when index-page? true)
                                :selmer/context  (cryogen-io/path "/" blog-prefix "/")
                                :posts           posts
+                               :leans           leans
                                :prev-uri        prev
                                :next-uri        next})))))))
 
@@ -537,7 +577,7 @@
      (println (yellow "overriding config.edn with:"))
      (pprint overrides-and-hooks))
    (let [overrides    (dissoc overrides-and-hooks :extend-params-fn :update-article-fn)
-         {:keys [^String site-url blog-prefix rss-name recent-posts keep-files ignored-files previews? author-root-uri theme]
+         {:keys [^String site-url blog-prefix rss-name recent-posts keep-files ignored-files ignored-files-sitemap previews? author-root-uri theme]
           :as   config} (resolve-config overrides)
          posts        (->> (read-posts config)
                            (add-prev-next)
@@ -610,7 +650,7 @@
        (println (blue "generating authors views"))
        (compile-authors params posts))
      (println (blue "generating site map"))
-     (->> (sitemap/generate site-url ignored-files)
+     (->> (sitemap/generate site-url ignored-files ignored-files-sitemap)
           (cryogen-io/create-file (cryogen-io/path "/" blog-prefix "sitemap.xml")))
      (println (blue "generating main rss"))
      (->> (rss/make-channel config posts)
