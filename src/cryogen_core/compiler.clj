@@ -18,7 +18,8 @@
             [cryogen-core.sitemap :as sitemap]
             [cryogen-core.util :as util]
             [cryogen-core.zip-util :as zip-util]
-            [cryogen-core.toc :as toc])
+            [cryogen-core.toc :as toc]
+            [camel-snake-kebab.core :as camel-snake-kebab])
   (:import java.util.Locale
            (java.io StringReader)
            (java.util Date)))
@@ -70,14 +71,14 @@
 
 (defn page-uri
   "Creates a URI from file name. `uri-type` is any of the uri types specified in config, e.g., `:post-root-uri`."
-  ([file-name params]
-   (page-uri file-name nil params))
-  ([file-name uri-type {:keys [blog-prefix clean-urls] :as params}]
+  ([path params]
+   (page-uri path nil params))
+  ([path uri-type {:keys [blog-prefix clean-urls] :as params}]
    (let [page-uri (get params uri-type)
          uri-end  (condp = clean-urls
-                    :trailing-slash (string/replace file-name #"(index)?\.html" "/")
-                    :no-trailing-slash (string/replace file-name #"(index)?\.html" "")
-                    :dirty file-name)]
+                    :trailing-slash (string/replace path #"(index)?\.html" "/")
+                    :no-trailing-slash (string/replace path #"(index)?\.html" "")
+                    :dirty path)]
      (cryogen-io/path "/" blog-prefix page-uri uri-end))))
 
 (defn read-page-meta
@@ -147,14 +148,17 @@
                             (.parse (java.text.SimpleDateFormat. (:post-date-format config)) (:date page-meta))
                             (parse-post-date file-name (:post-date-format config)))
           archive-fmt     (java.text.SimpleDateFormat. ^String (:archive-group-format config) (Locale/getDefault))
-          formatted-group (.format archive-fmt date)]
+          formatted-group (.format archive-fmt date)
+          path (or (when (:custom-path page-meta)
+                     (camel-snake-kebab/->kebab-case-string (:custom-path page-meta)))
+                   file-name)]
       (-> (merge-meta-and-content file-name (update page-meta :layout #(or % :post)) content-dom)
           (merge
             {:type                    :post
              :date                    date
              :formatted-archive-group formatted-group
              :parsed-archive-group    (.parse archive-fmt formatted-group)
-             :uri                     (page-uri file-name :post-root-uri config)
+             :uri                     (page-uri path :post-root-uri config)
              :tags                    (set (:tags page-meta))
              :klipse/global           (:klipse config)
              :klipse/local            (:klipse page-meta)})
