@@ -170,7 +170,7 @@
                             (parse-post-date file-name (:post-date-format config)))
           archive-fmt     (java.text.SimpleDateFormat. ^String (:archive-group-format config) (Locale/getDefault))
           formatted-group (.format archive-fmt date)
-          path (or (when (:custom-path page-meta)
+          path (or (when-not (str/blank? (:custom-path page-meta))
                      (camel-snake-kebab/->kebab-case-string (:custom-path page-meta)))
                    file-name)]
       (-> (merge-meta-and-content file-name (update page-meta :layout #(or % :post)) content-dom)
