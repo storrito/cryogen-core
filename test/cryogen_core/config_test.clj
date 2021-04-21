@@ -12,6 +12,7 @@
    :post-root-uri                "posts-output"
    :page-root-uri                "pages-output"
    :tag-root-uri                 "tags-output"
+   :category-root-uri            "categories-output"
    :author-root-uri              "authors-output"
    :public-dest                  "public"
    :blog-prefix                  "/blog"

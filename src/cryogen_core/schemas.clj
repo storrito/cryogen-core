@@ -10,7 +10,7 @@
    (s/optional-key :css-theme) s/Str})
 
 (def MetaData
-  {(s/optional-key :layout)     s/Keyword
+  {(s/optional-key :layout)     s/Str
    :title                       s/Str
    (s/optional-key :date)       s/Str
    (s/optional-key :author)     s/Str
@@ -35,6 +35,7 @@
    (s/optional-key :post-root-uri)        (s/maybe s/Str)
    (s/optional-key :page-root-uri)        (s/maybe s/Str)
    (s/optional-key :tag-root-uri)         s/Str
+   (s/optional-key :category-root-uri)    s/Str
    (s/optional-key :author-root-uri)      s/Str
    (s/optional-key :public-dest)          s/Str
    :blog-prefix                           s/Str

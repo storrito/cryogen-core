@@ -24,6 +24,7 @@
     (s/validate schemas/Config config)
     (let [config (-> config
                      (update-in [:tag-root-uri] (fnil identity ""))
+                     (update-in [:category-root-uri] (fnil identity ""))
                      (update-in [:public-dest] (fnil identity "public"))
                      (update-in [:recent-posts] (fnil identity 3))
                      (update-in [:archive-group-format] (fnil identity "yyyy MMMM"))

@@ -198,7 +198,8 @@
              (remove #(= (:draft? %) true)))))
        (sort-by :date)
        reverse
-       (drop-while #(and (:hide-future-posts? config) (.after ^Date (:date %) (Date.))))))
+       (drop-while #(and (:hide-future-posts? config)
+                         (.after ^Date (:date %) (Date.))))))
 
 (defn read-pages
   "Returns a sequence of maps representing the data from markdown files of pages.
@@ -224,6 +225,11 @@
   "Maps all the tags with a list of posts that contain each tag"
   [posts]
   (reduce tag-post {} posts))
+
+(defn group-by-category
+  [posts]
+  (group-by (fn [p] (or (:category p)
+                        "post")) posts))
 
 (defn group-for-archive
   "Groups the posts by month and year for archive sorting"
@@ -254,6 +260,12 @@
   [config tag]
   {:name (name tag)
    :uri  (page-uri (str (name tag) ".html") :tag-root-uri config)})
+
+(defn category-info
+  "Returns a map containing the name and uri of the specified category"
+  [config category]
+  {:name (name category)
+   :uri  (page-uri (str (name category) ".html") :category-root-uri config)})
 
 (defn add-prev-next
   "Adds a :prev and :next key to the page/post data containing the metadata of the prev/next
@@ -370,6 +382,25 @@
                                          :posts           posts
                                          :uri             uri})))))))
 
+(defn compile-categories
+  "Compiles all the category pages into html and spits them out into the public folder"
+  [{:keys [blog-prefix category-root-uri] :as params} posts-by-category]
+  (when-not (empty? posts-by-category)
+    (println (blue "compiling categories"))
+    (cryogen-io/create-folder (cryogen-io/path "/" blog-prefix category-root-uri))
+    (doseq [[category posts] posts-by-category]
+      (let [{:keys [name uri]} (category-info params category)]
+        (println "-->" (cyan uri))
+        (write-html uri
+                    params
+                    (render-file "/html/category.html"
+                                 (merge params
+                                        {:active-page     "categories"
+                                         :selmer/context  (cryogen-io/path "/" blog-prefix "/")
+                                         :name            name
+                                         :posts           posts
+                                         :uri             uri})))))))
+
 (defn compile-tags-page [{:keys [blog-prefix] :as params}]
   "Compiles a page with links to each tag page. Spits the page into the public folder"
   (println (blue "compiling tags page"))
@@ -381,6 +412,35 @@
                                     {:active-page     "tags"
                                      :selmer/context  (cryogen-io/path "/" blog-prefix "/")
                                      :uri             uri})))))
+
+(defn compile-categories-page [{:keys [blog-prefix] :as params}]
+  "Compiles a page with links to each category page. Spits the page into the public folder"
+  (println (blue "compiling categories page"))
+  (let [uri (page-uri "categories.html" params)]
+    (write-html uri
+                params
+                (render-file "/html/categories.html"
+                             (merge params
+                                    {:active-page     "categories"
+                                     :selmer/context  (cryogen-io/path "/" blog-prefix "/")
+                                     :uri             uri})))))
+
+(defn compile-updates-page
+  "Compiles all the tag pages into html and spits them out into the public folder"
+  [{:keys [blog-prefix category-root-uri] :as params} update-posts]
+  (when-not (empty? update-posts)
+    (println (blue "compiling updates"))
+    (cryogen-io/create-folder (cryogen-io/path "/" blog-prefix category-root-uri))
+    (let [uri (page-uri (str "updates.html") params)]
+      (println "-->" (cyan uri))
+      (write-html uri
+                  params
+                  (render-file "/html/updates.html"
+                               (merge params
+                                      {:active-page     "updates"
+                                       :selmer/context  (cryogen-io/path "/" blog-prefix "/")
+                                       :posts           update-posts
+                                       :uri             uri}))))))
 
 (defn content-until-more-marker
   "Returns the content until the <!--more--> special comment,
@@ -586,6 +646,7 @@
                            (map #(update-article-fn % config))
                            (remove nil?))
          posts-by-tag (group-by-tags posts)
+         posts-by-category (group-by-category posts)
          posts        (tag-posts posts config)
          latest-posts (->> posts (take recent-posts) vec)
          pages        (->> (read-pages config)
@@ -607,6 +668,7 @@
                         :title         (:site-title config)
                         :active-page   "home"
                         :tags          (map (partial tag-info config) (keys posts-by-tag))
+                        :categories    (map (partial category-info config) (keys posts-by-category))
                         :latest-posts  latest-posts
                         :navbar-pages  navbar-pages
                         :sidebar-pages sidebar-pages
@@ -616,6 +678,8 @@
                         :archives-uri  (page-uri "archives.html" config)
                         :index-uri     (page-uri "index.html" config)
                         :tags-uri      (page-uri "tags.html" config)
+                        :category-uri  (page-uri "category.html" config)
+                        :updates-uri   (page-uri "updates.html" config)
                         :rss-uri       (cryogen-io/path "/" blog-prefix rss-name)
                         :site-url      (if (.endsWith site-url "/") (.substring site-url 0 (dec (count site-url))) site-url)})
          params       (extend-params-fn
@@ -623,6 +687,7 @@
                         {:posts posts
                          :pages pages
                          :posts-by-tag posts-by-tag
+                         :posts-by-category posts-by-category
                          :navbar-pages navbar-pages
                          :sidebar-pages sidebar-pages})]
 
@@ -641,7 +706,13 @@
      (compile-pages params other-pages)
      (compile-posts params posts)
      (compile-tags params posts-by-tag)
+     (compile-categories params posts-by-category)
+
      (compile-tags-page params)
+     (compile-categories-page params)
+     (compile-updates-page params (get posts-by-category
+                                       "updates"))
+
      (if previews?
        (compile-preview-pages params posts)
        (compile-index params))
