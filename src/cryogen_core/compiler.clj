@@ -711,7 +711,7 @@
      (compile-tags-page params)
      (compile-categories-page params)
      (compile-updates-page params (get posts-by-category
-                                       "updates"))
+                                       "update"))
 
      (if previews?
        (compile-preview-pages params posts)
